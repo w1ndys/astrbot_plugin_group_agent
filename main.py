@@ -42,6 +42,22 @@ class GroupAgentPlugin(Star):
         """入口里读开关配置的短封装。"""
         return get_bool(self._config, key, default)
 
+    @filter.on_llm_request()
+    async def on_llm_request(self, event: AstrMessageEvent, req) -> None:
+        """在请求模型前补一句：群管回复要短，避免预告和列方案。"""
+        extra = (
+            "群管回复规则：只对用户说结果，一两句中文。"
+            "不要说「我先查一下」。不要列一是二是三是。"
+            "不要复述英文报错。已有 QQ 号就直接禁言，不要先查询。"
+            "不能操作管理员时只说「做不到，对方是管理员」。"
+        )
+        sys_p = getattr(req, "system_prompt", None)
+        # 没有 system_prompt 字段时接到 prompt 末尾
+        if sys_p is None:
+            req.prompt = str(getattr(req, "prompt", "") or "") + "\n" + extra
+            return
+        req.system_prompt = str(sys_p or "") + "\n" + extra
+
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent) -> None:
         """被动记录每一条群消息。不唤醒机器人的话也要记下，否则总结会缺段。"""
@@ -77,7 +93,8 @@ class GroupAgentPlugin(Star):
         duration_minutes: float = DEFAULT_BAN_MINUTES,
         reason: str = "",
     ) -> str:
-        """禁言或解除禁言某个群成员。
+        """禁言或解除禁言某个群成员。已有纯数字 QQ 号时直接调用，不要先查询。
+        对用户最终回复只要一句结果，不要预告、不要列方案。
 
         Args:
             user_id(string): 要操作的群成员 QQ 号，必须是纯数字
@@ -132,7 +149,8 @@ class GroupAgentPlugin(Star):
         keyword: str = "",
         list_admins: bool = False,
     ) -> str:
-        """查询群成员。可按 QQ 号查、按昵称反查 QQ 号，或列出管理员。
+        """查询群成员。只有不知道 QQ 号时才用；已经有 QQ 号就不要调用。
+        对用户最终回复不要念出完整成员资料。
 
         Args:
             user_id(string): 要查询的 QQ 号，和 keyword、list_admins 三选一

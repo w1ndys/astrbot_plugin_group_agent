@@ -41,15 +41,10 @@ async def ban_member(
         return api_err
     # 0 秒是解除禁言，和「禁言 N 分钟」用不同话术
     if seconds == 0:
-        msg = f"已解除 {target} 的禁言。"
-    # 大于 0 秒就是禁言，把秒换回分钟给模型看
-    else:
-        minutes = seconds / 60
-        msg = f"已禁言 {target} {minutes:g} 分钟。"
-    # 有原因就附上，方便群友知道为什么
-    if reason:
-        msg += f"原因：{reason}"
-    return msg
+        return f"已解除 {target} 的禁言。"
+    # 大于 0 秒就是禁言；原因不回给模型，免得它再复述一遍
+    minutes = seconds / 60
+    return f"已禁言 {target} {minutes:g} 分钟。"
 
 
 def _ban_seconds(duration_minutes: object) -> tuple[int, str]:
@@ -128,12 +123,9 @@ async def kick_member(
     if not ok:
         return api_err
     msg = f"已将 {target} 移出本群。"
-    # 勾了拒绝再加群时明确说出来
+    # 勾了拒绝再加群时带一句，不加原因，避免模型复述
     if reject_add_request:
-        msg += "已拒绝其再次加群。"
-    # 有原因就附上
-    if reason:
-        msg += f"原因：{reason}"
+        msg += "已拒绝再次加群。"
     return msg
 
 

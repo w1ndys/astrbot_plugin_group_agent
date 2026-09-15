@@ -30,15 +30,24 @@ MESSAGE_PLACEHOLDERS = {
     "Markdown": "[富文本]",
 }
 
-# 协议端报错关键词 -> 给模型看的中文说明。按列表顺序匹配第一条。
+# 协议端报错关键词 -> 给模型看的短中文。按列表顺序匹配第一条。
+# 命中后不要再附带英文异常原文，否则模型会把原文念给群友。
 ERROR_HINTS = [
     (
+        ("CANNOT BAN ADMIN", "BAN ADMIN", "cannot ban admin"),
+        "做不到，对方是管理员。",
+    ),
+    (
+        ("CANNOT KICK ADMIN", "KICK ADMIN", "cannot kick admin"),
+        "做不到，对方是管理员。",
+    ),
+    (
         ("NOT_ENOUGH_PERM", "PERMISSION", "PERM", "权限"),
-        "机器人权限不足。请在 QQ 里把机器人设为该群的管理员。",
+        "机器人权限不足。",
     ),
     (
         ("OWNER", "群主"),
-        "不能对群主执行该操作。",
+        "做不到，对方是群主。",
     ),
     (
         ("GROUP_NOT_FOUND", "群不存在", "NO_SUCH_GROUP"),

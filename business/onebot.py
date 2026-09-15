@@ -6,23 +6,41 @@ from ..entity.constants import ERROR_HINTS
 from .settings import get_int
 
 
+def _extract_wording(text: str) -> str:
+    """从 ActionFailed 字符串里抽出 wording='...' 这一小段。"""
+    key = "wording='"
+    start = text.find(key)
+    # 没有 wording 字段就放弃
+    if start < 0:
+        return ""
+    start += len(key)
+    end = text.find("'", start)
+    # 引号不配对时放弃，避免切出一长串
+    if end < 0:
+        return ""
+    return text[start:end]
+
+
 def explain_error(exc: BaseException) -> str:
     """把协议端异常收成模型能看懂的中文。按关键词匹配第一条提示。"""
     text = str(exc)
     upper = text.upper()
     for keys, hint in ERROR_HINTS:
         for key in keys:
-            # 中文关键词用原文比，英文用大写比，避免大小写漏匹配
             # 英文关键词忽略大小写；中文关键词用原文比
             if key.isascii():
                 hit = key.upper() in upper
             # 中文关键词按原文匹配，不能 upper
             else:
                 hit = key in text
-            # 命中第一条提示就返，避免后面更宽的词把原因沉没
+            # 命中第一条提示就返，不再附带英文原文
             if hit:
-                return hint + " 原始错误：" + text
-    return "协议端调用失败：" + text
+                return hint
+    wording = _extract_wording(text)
+    # 协议端带了 wording 时，用它当短原因，不要整段 ActionFailed
+    if wording:
+        return "做不到：" + wording
+    return "协议端调用失败。"
 
 
 async def call_action(
