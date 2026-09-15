@@ -47,6 +47,13 @@ class GroupAgentPlugin(Star):
         logger.info("[group_agent] 群聊记录库已就绪：%s", db_path)
         self._cleanup_task = asyncio.create_task(self._cleanup_loop())
 
+    async def initialize(self) -> None:
+        """启动时关掉 AstrBot 自带的群历史工具，避免模型拿错 message_id。"""
+        ok = await self.context.deactivate_llm_tool_async("get_group_message_history")
+        # 关掉了才记一句，没找到工具也不当失败
+        if ok:
+            logger.info("[group_agent] 已停用内置工具 get_group_message_history")
+
     def _cfg_int(self, key: str, default: int) -> int:
         """入口里读整数配置的短封装。"""
         return get_int(self._config, key, default)
@@ -71,8 +78,13 @@ class GroupAgentPlugin(Star):
         # 没有 system_prompt 字段时接到 prompt 末尾
         if sys_p is None:
             req.prompt = str(getattr(req, "prompt", "") or "") + "\n" + extra
-            return
-        req.system_prompt = str(sys_p or "") + "\n" + extra
+        # 有 system_prompt 就接到系统提示，模型更不容易漏看
+        else:
+            req.system_prompt = str(sys_p or "") + "\n" + extra
+        tools = getattr(req, "func_tool", None)
+        # 请求里还挂着内置历史工具时当场拿掉，避免模型再用错 ID
+        if tools is not None and hasattr(tools, "remove_tool"):
+            tools.remove_tool("get_group_message_history")
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent) -> None:
