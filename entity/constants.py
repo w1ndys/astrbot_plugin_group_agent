@@ -23,6 +23,10 @@ NOTICE_MAX_LIMIT = 10
 # 一次最多撤回几条。撤回是群里可见的动作，条数要夹住。
 RECALL_RECENT_MAX = 10
 
+# 协议端拉历史默认/上限。条数太大协议端会慢，也会撑上下文。
+HISTORY_API_DEFAULT = 20
+HISTORY_API_MAX = 50
+
 # 加群申请一次展示几条，避免把别的群的申请塞进上下文。
 JOIN_REQUEST_SHOW_LIMIT = 10
 

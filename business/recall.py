@@ -2,6 +2,7 @@
 
 from ..entity.constants import RECALL_RECENT_MAX
 from .auth import guard
+from .history import live_recent_ids
 from .onebot import call_action
 from .parse import parse_int
 from .settings import get_bool
@@ -40,9 +41,12 @@ async def recall_recent(event: object, config: object, store: object, count: int
         return err
     n = _clip_count(count)
     ids = await store.recent_ids(str(group_id), n)
-    # 库里没有消息 ID，多半是迁移前的老记录，或还没新消息进来
+    # 库里没有消息 ID 时改问协议端，那个短 ID 才能拿去撤回
     if not ids:
-        return "最近没有可撤回的消息。升级后新收到的消息才会带消息 ID。"
+        ids = await live_recent_ids(event, config, group_id, n)
+    # 本地和协议端都没有可撤回的 ID
+    if not ids:
+        return "最近没有可撤回的消息。"
     ok_n = 0
     fail_n = 0
     last_err = ""

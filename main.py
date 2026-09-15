@@ -63,6 +63,9 @@ class GroupAgentPlugin(Star):
             "不要说「我先查一下」。不要列一是二是三是。"
             "不要复述英文报错。已有 QQ 号就直接禁言，不要先查询。"
             "不能操作管理员时只说「做不到，对方是管理员」。"
+            "查记录和撤回只用 group_chat_history / group_recall，"
+            "不要用 get_group_message_history。"
+            "撤回必须用记录里的 #数字。群名片和昵称可能不同，按 QQ 号认人。"
         )
         sys_p = getattr(req, "system_prompt", None)
         # 没有 system_prompt 字段时接到 prompt 末尾
@@ -181,7 +184,9 @@ class GroupAgentPlugin(Star):
         hours: float = 24,
         max_messages: int = 200,
     ) -> str:
-        """获取本群最近一段时间的聊天记录，用于总结。
+        """获取本群最近聊天记录。撤回前必须先调这个拿到 #消息ID。
+        不要用 get_group_message_history，那个 ID 撤不了。
+        群名片和昵称可能不同，按 QQ 号认人。
 
         Args:
             hours(number): 回溯多少小时，默认 24
@@ -232,8 +237,8 @@ class GroupAgentPlugin(Star):
 
     @filter.llm_tool(name="group_recall")
     async def tool_group_recall(self, event: AstrMessageEvent, message_id: str) -> str:
-        """撤回一条指定消息。message_id 来自聊天记录里的 #数字。
-        太旧的消息协议端已经忘了 ID，会撤回失败。对用户最终回复只要一句结果。
+        """撤回一条指定消息。message_id 必须是 group_chat_history 返回的 #数字。
+        不要用其它历史工具给的 id。太旧会失败。对用户最终回复只要一句结果。
 
         Args:
             message_id(string): 要撤回的消息 ID，必须是数字
@@ -242,7 +247,7 @@ class GroupAgentPlugin(Star):
 
     @filter.llm_tool(name="group_recall_recent")
     async def tool_group_recall_recent(self, event: AstrMessageEvent, count: int = 1) -> str:
-        """撤回本群最近若干条消息。只撤升级后新收到、库里带消息 ID 的记录。
+        """撤回本群最近若干条消息。库里没有消息 ID 时会改问协议端。
         对用户最终回复只要一句结果。
 
         Args:
