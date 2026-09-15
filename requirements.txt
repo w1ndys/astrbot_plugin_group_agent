@@ -1,0 +1,2 @@
+# 本插件只依赖 AstrBot 本体与 Python 标准库（sqlite3 / asyncio / pathlib / datetime）。
+# 无需额外第三方依赖。

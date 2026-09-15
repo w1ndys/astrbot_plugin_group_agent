@@ -1,0 +1,62 @@
+{
+  "operator_mode": {
+    "description": "群管工具的操作权限",
+    "type": "string",
+    "options": ["group_admin", "astrbot_admin", "everyone"],
+    "default": "group_admin",
+    "hint": "group_admin：QQ 群主/群管理员 或 AstrBot 管理员（推荐）；astrbot_admin：仅 AstrBot 管理员；everyone：所有人（危险，不建议）"
+  },
+  "enable_history": {
+    "description": "记录群聊消息",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后会把收到的群消息写入本地 SQLite，用于聊天记录总结。只有机器人运行期间收到的消息才会被记录。"
+  },
+  "retention_days": {
+    "description": "聊天记录保留天数",
+    "type": "int",
+    "default": 30,
+    "hint": "超过该天数的记录会被后台任务定期清理。"
+  },
+  "max_text_len": {
+    "description": "单条消息入库最大字符数",
+    "type": "int",
+    "default": 300,
+    "hint": "过长的消息会被截断，避免大段文本占满存储和上下文。"
+  },
+  "history_operator_only": {
+    "description": "聊天记录仅操作者可见",
+    "type": "bool",
+    "default": true,
+    "hint": "开启后，只有通过 operator_mode 鉴权的人才能让机器人总结聊天记录（聊天记录涉及他人隐私，建议保持开启）。"
+  },
+  "summary_max_messages": {
+    "description": "单次总结最多返回的消息条数",
+    "type": "int",
+    "default": 300,
+    "hint": "模型请求超过该值时会被截断，用于控制 Token 消耗。"
+  },
+  "allow_kick": {
+    "description": "允许通过自然语言踢人",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 group_kick 工具会拒绝执行。"
+  },
+  "allow_ban_all": {
+    "description": "允许全员禁言",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 group_ban_all 工具会拒绝执行。"
+  },
+  "api_timeout": {
+    "description": "协议端 API 调用超时（秒）",
+    "type": "int",
+    "default": 15,
+    "hint": "超时后会作为工具错误反馈给模型，而不是卡住整个 Agent。"
+  },
+  "cleanup_interval_hours": {
+    "description": "过期记录清理任务间隔（小时）",
+    "type": "int",
+    "default": 6
+  }
+}
