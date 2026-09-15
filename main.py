@@ -20,6 +20,12 @@ from .business.info import (
     read_notice,
     send_notice,
 )
+from .business.member import (
+    handle_join_request,
+    list_join_requests,
+    poke_member,
+    set_title,
+)
 from .business.ops import ban_all, ban_member, kick_member, set_card
 from .business.parse import clip_text, render_message
 from .business.query import query_member
@@ -246,6 +252,54 @@ class GroupAgentPlugin(Star):
         # 超过上限时夹住，避免一次把最近十几条全撤掉
         n = min(n, RECALL_RECENT_MAX)
         return await recall_recent(event, self._config, self.store, n)
+
+    @filter.llm_tool(name="group_set_title")
+    async def tool_group_set_title(
+        self, event: AstrMessageEvent, user_id: str, title: str = ""
+    ) -> str:
+        """设置或清空某个群成员的专属头衔。空字符串表示清空。
+        对用户最终回复只要一句结果。
+
+        Args:
+            user_id(string): 要改头衔的群成员 QQ 号，必须是纯数字
+            title(string): 新的专属头衔；空字符串表示清空
+        """
+        return await set_title(event, self._config, user_id, title)
+
+    @filter.llm_tool(name="group_poke")
+    async def tool_group_poke(self, event: AstrMessageEvent, user_id: str) -> str:
+        """在本群戳一戳某个成员。对用户最终回复只要一句结果。
+
+        Args:
+            user_id(string): 要戳的群成员 QQ 号，必须是纯数字
+        """
+        return await poke_member(event, self._config, user_id)
+
+    @filter.llm_tool(name="group_join_list")
+    async def tool_group_join_list(self, event: AstrMessageEvent) -> str:
+        """列出本群尚未处理的加群申请。同意或拒绝时要用返回的 flag。
+
+        Args: 无
+        """
+        return await list_join_requests(event, self._config)
+
+    @filter.llm_tool(name="group_join_handle")
+    async def tool_group_join_handle(
+        self,
+        event: AstrMessageEvent,
+        flag: str,
+        approve: bool,
+        reason: str = "",
+    ) -> str:
+        """同意或拒绝一条加群申请。flag 来自 group_join_list。
+        对用户最终回复只要一句结果。
+
+        Args:
+            flag(string): 申请标识，必须来自 group_join_list
+            approve(boolean): true 同意，false 拒绝
+            reason(string): 拒绝理由，同意时可空
+        """
+        return await handle_join_request(event, self._config, flag, approve, reason)
 
     @filter.command("群管状态")
     async def cmd_status(self, event: AstrMessageEvent):

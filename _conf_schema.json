@@ -60,6 +60,12 @@
     "default": true,
     "hint": "关闭后 group_recall / group_recall_recent 会拒绝执行。撤回是群里可见的动作。"
   },
+  "allow_join_request": {
+    "description": "允许处理加群申请",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 group_join_handle 会拒绝执行。"
+  },
   "api_timeout": {
     "description": "协议端 API 调用超时（秒）",
     "type": "int",

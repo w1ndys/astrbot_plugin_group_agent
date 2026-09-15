@@ -23,6 +23,9 @@ NOTICE_MAX_LIMIT = 10
 # 一次最多撤回几条。撤回是群里可见的动作，条数要夹住。
 RECALL_RECENT_MAX = 10
 
+# 加群申请一次展示几条，避免把别的群的申请塞进上下文。
+JOIN_REQUEST_SHOW_LIMIT = 10
+
 # 消息链里非文本段的占位符，总结时至少能看出「这里发过图/语音」。
 MESSAGE_PLACEHOLDERS = {
     "Image": "[图片]",
