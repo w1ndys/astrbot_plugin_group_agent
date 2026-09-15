@@ -14,6 +14,12 @@ DEFAULT_BAN_MINUTES = 10
 MEMBER_LIST_LIMIT = 200
 MEMBER_SHOW_LIMIT = 30
 
+# 群公告常常是整篇 HTML 文本，展示前截断，避免撑爆上下文。
+NOTICE_TEXT_LIMIT = 400
+# 一次默认展示几条公告，以及模型最多能要几条。
+NOTICE_SHOW_LIMIT = 3
+NOTICE_MAX_LIMIT = 10
+
 # 消息链里非文本段的占位符，总结时至少能看出「这里发过图/语音」。
 MESSAGE_PLACEHOLDERS = {
     "Image": "[图片]",

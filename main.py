@@ -14,12 +14,18 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 
 from .business.history import read_history
+from .business.info import (
+    list_bans,
+    query_group_info,
+    read_notice,
+    send_notice,
+)
 from .business.ops import ban_all, ban_member, kick_member, set_card
 from .business.parse import clip_text, render_message
 from .business.query import query_member
 from .business.settings import get_bool, get_int
 from .data.store import HistoryStore
-from .entity.constants import DEFAULT_BAN_MINUTES
+from .entity.constants import DEFAULT_BAN_MINUTES, NOTICE_SHOW_LIMIT
 
 
 class GroupAgentPlugin(Star):
@@ -173,6 +179,47 @@ class GroupAgentPlugin(Star):
             max_messages(number): 最多返回多少条，默认 200
         """
         return await read_history(self.store, event, self._config, hours, int(max_messages))
+
+    @filter.llm_tool(name="group_info")
+    async def tool_group_info(self, event: AstrMessageEvent) -> str:
+        """查本群基本信息：群名、人数、上限、群主、是否全员禁言。
+        对用户最终回复不要照念全部字段。
+
+        Args: 无
+        """
+        return await query_group_info(event, self._config)
+
+    @filter.llm_tool(name="group_notice_list")
+    async def tool_group_notice_list(
+        self, event: AstrMessageEvent, limit: int = NOTICE_SHOW_LIMIT
+    ) -> str:
+        """读本群公告。用户想看看群公告时用这个。
+
+        Args:
+            limit(number): 最多读几条，默认 3，最大 10
+        """
+        return await read_notice(event, self._config, int(limit))
+
+    @filter.llm_tool(name="group_notice_send")
+    async def tool_group_notice_send(
+        self, event: AstrMessageEvent, content: str, pinned: bool = False
+    ) -> str:
+        """发布群公告。这是公开动作，全体群成员都会看到，只在用户明确要求时调用。
+        对用户最终回复只要一句结果。
+
+        Args:
+            content(string): 公告正文，不能为空
+            pinned(boolean): 是否置顶，默认 false
+        """
+        return await send_notice(event, self._config, content, pinned)
+
+    @filter.llm_tool(name="group_ban_list")
+    async def tool_group_ban_list(self, event: AstrMessageEvent) -> str:
+        """查本群当前被禁言的成员名单。
+
+        Args: 无
+        """
+        return await list_bans(event, self._config)
 
     @filter.command("群管状态")
     async def cmd_status(self, event: AstrMessageEvent):

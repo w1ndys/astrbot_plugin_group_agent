@@ -102,3 +102,16 @@ async def guard(event: object, config: object) -> tuple[object, str]:
     if err:
         return None, err
     return group_id, ""
+
+
+async def guard_readonly(event: object, config: object) -> tuple[object, str]:
+    """只读动作的检查：必须在群里，调用者有权限即可，不要求机器人是管理员。"""
+    group_id = group_id_of(event)
+    # 私聊没有群号，读不到群信息
+    if not group_id:
+        return None, "该操作只能在群聊中使用。"
+    err = await check_operator(event, config, group_id)
+    # 调用者没权限就不放行，群信息和公告同样涉及群内隐私
+    if err:
+        return None, err
+    return group_id, ""
