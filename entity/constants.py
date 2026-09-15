@@ -30,6 +30,28 @@ HISTORY_API_MAX = 50
 # 加群申请一次展示几条，避免把别的群的申请塞进上下文。
 JOIN_REQUEST_SHOW_LIMIT = 10
 
+# 执行层走 guard / guard_readonly 的工具。没权限的人在发模型前要从列表摘掉。
+OPERATOR_LLM_TOOLS = (
+    "group_ban",
+    "group_ban_all",
+    "group_kick",
+    "group_set_card",
+    "group_member_query",
+    "group_info",
+    "group_notice_list",
+    "group_notice_send",
+    "group_ban_list",
+    "group_recall",
+    "group_recall_recent",
+    "group_set_title",
+    "group_poke",
+    "group_join_list",
+    "group_join_handle",
+)
+
+# 聊天记录工具。history_operator_only 打开时和上面一起摘。
+HISTORY_LLM_TOOL = "group_chat_history"
+
 # 消息链里非文本段的占位符，总结时至少能看出「这里发过图/语音」。
 MESSAGE_PLACEHOLDERS = {
     "Image": "[图片]",

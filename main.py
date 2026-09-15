@@ -1,5 +1,5 @@
 # 入口层：向 AstrBot 注册 LLM 工具、群消息记录和状态指令。
-# 真正的权限判断和协议调用在 business 里。
+# 真正的权限判断和协议调用在 business 里。发模型前会按权限摘掉工具。
 #
 # 工具必须 return str，不能 yield event.plain_result。
 # yield 会把结果直接发给用户，模型拿到空结果，
@@ -26,6 +26,7 @@ from .business.member import (
     poke_member,
     set_title,
 )
+from .business.auth import tools_to_hide_before_llm
 from .business.ops import ban_all, ban_member, kick_member, set_card
 from .business.parse import clip_text, render_message
 from .business.query import query_member
@@ -64,16 +65,29 @@ class GroupAgentPlugin(Star):
 
     @filter.on_llm_request()
     async def on_llm_request(self, event: AstrMessageEvent, req) -> None:
-        """在请求模型前补一句：群管回复要短，避免预告和列方案。"""
+        """请求模型前：没权限则摘掉群管工具，有权限才补群管回复规则。"""
+        tools = getattr(req, "func_tool", None)
+        hidden = await tools_to_hide_before_llm(event, self._config)
+        can_operate = not hidden
+        # 请求里还挂着内置历史工具时当场拿掉，避免模型再用错 ID
+        if tools is not None and hasattr(tools, "remove_tool"):
+            tools.remove_tool("get_group_message_history")
+            for name in hidden:
+                tools.remove_tool(name)
         extra = (
             "群管回复规则：只对用户说结果，一两句中文。"
             "不要说「我先查一下」。不要列一是二是三是。"
-            "不要复述英文报错。已有 QQ 号就直接禁言，不要先查询。"
-            "不能操作管理员时只说「做不到，对方是管理员」。"
-            "查记录和撤回只用 group_chat_history / group_recall，"
+            "不要复述英文报错。"
             "不要用 get_group_message_history。"
-            "撤回必须用记录里的 #数字。群名片和昵称可能不同，按 QQ 号认人。"
         )
+        # 没权限时不要教模型去禁言，工具列表里也已经没有这些函数
+        if can_operate:
+            extra += (
+                "已有 QQ 号就直接禁言，不要先查询。"
+                "不能操作管理员时只说「做不到，对方是管理员」。"
+                "查记录和撤回只用 group_chat_history / group_recall。"
+                "撤回必须用记录里的 #数字。群名片和昵称可能不同，按 QQ 号认人。"
+            )
         sys_p = getattr(req, "system_prompt", None)
         # 没有 system_prompt 字段时接到 prompt 末尾
         if sys_p is None:
@@ -81,10 +95,6 @@ class GroupAgentPlugin(Star):
         # 有 system_prompt 就接到系统提示，模型更不容易漏看
         else:
             req.system_prompt = str(sys_p or "") + "\n" + extra
-        tools = getattr(req, "func_tool", None)
-        # 请求里还挂着内置历史工具时当场拿掉，避免模型再用错 ID
-        if tools is not None and hasattr(tools, "remove_tool"):
-            tools.remove_tool("get_group_message_history")
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     async def on_group_message(self, event: AstrMessageEvent) -> None:
