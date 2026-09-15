@@ -54,6 +54,12 @@
     "default": true,
     "hint": "关闭后 group_notice_send 工具会拒绝执行。公告是公开动作，全体群成员都会看到，可按需关闭。"
   },
+  "allow_recall": {
+    "description": "允许撤回消息",
+    "type": "bool",
+    "default": true,
+    "hint": "关闭后 group_recall / group_recall_recent 会拒绝执行。撤回是群里可见的动作。"
+  },
   "api_timeout": {
     "description": "协议端 API 调用超时（秒）",
     "type": "int",

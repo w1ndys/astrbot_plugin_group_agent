@@ -23,9 +23,10 @@ from .business.info import (
 from .business.ops import ban_all, ban_member, kick_member, set_card
 from .business.parse import clip_text, render_message
 from .business.query import query_member
+from .business.recall import recall_one, recall_recent
 from .business.settings import get_bool, get_int
 from .data.store import HistoryStore
-from .entity.constants import DEFAULT_BAN_MINUTES, NOTICE_SHOW_LIMIT
+from .entity.constants import DEFAULT_BAN_MINUTES, NOTICE_SHOW_LIMIT, RECALL_RECENT_MAX
 
 
 class GroupAgentPlugin(Star):
@@ -79,6 +80,7 @@ class GroupAgentPlugin(Star):
         if not text:
             text = "[空消息]"
         text = clip_text(text, self._cfg_int("max_text_len", 300))
+        message_id = _event_message_id(event)
         try:
             await self.store.add(
                 int(time.time()),
@@ -86,6 +88,7 @@ class GroupAgentPlugin(Star):
                 str(event.get_sender_id()),
                 event.get_sender_name() or "未知用户",
                 text,
+                message_id,
             )
         except Exception as exc:
             # 入库失败不能影响正常聊天
@@ -221,6 +224,29 @@ class GroupAgentPlugin(Star):
         """
         return await list_bans(event, self._config)
 
+    @filter.llm_tool(name="group_recall")
+    async def tool_group_recall(self, event: AstrMessageEvent, message_id: str) -> str:
+        """撤回一条指定消息。message_id 来自聊天记录里的 #数字。
+        太旧的消息协议端已经忘了 ID，会撤回失败。对用户最终回复只要一句结果。
+
+        Args:
+            message_id(string): 要撤回的消息 ID，必须是数字
+        """
+        return await recall_one(event, self._config, message_id)
+
+    @filter.llm_tool(name="group_recall_recent")
+    async def tool_group_recall_recent(self, event: AstrMessageEvent, count: int = 1) -> str:
+        """撤回本群最近若干条消息。只撤升级后新收到、库里带消息 ID 的记录。
+        对用户最终回复只要一句结果。
+
+        Args:
+            count(number): 撤回最近几条，默认 1，最大 10
+        """
+        n = int(count) if count else 1
+        # 超过上限时夹住，避免一次把最近十几条全撤掉
+        n = min(n, RECALL_RECENT_MAX)
+        return await recall_recent(event, self._config, self.store, n)
+
     @filter.command("群管状态")
     async def cmd_status(self, event: AstrMessageEvent):
         """给管理员看的插件状态。这是指令不是 LLM 工具，结果直接发给用户。"""
@@ -281,3 +307,16 @@ class GroupAgentPlugin(Star):
             pass
         except Exception as exc:
             logger.error("[group_agent] 停止清理任务失败：%s", exc)
+
+
+def _event_message_id(event: object) -> str:
+    """从事件里取出协议端消息 ID。没有就返回空，这条就撤不了。"""
+    obj = getattr(event, "message_obj", None)
+    # 没有消息对象时没法取 ID
+    if obj is None:
+        return ""
+    raw = getattr(obj, "message_id", None)
+    # 字段缺失或空值都当没有
+    if raw is None or raw == "":
+        return ""
+    return str(raw)

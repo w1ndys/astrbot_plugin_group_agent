@@ -15,6 +15,7 @@ class HistoryStore:
         self._lock = asyncio.Lock()
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._create_table()
+        self._migrate()
 
     def _connect(self) -> sqlite3.Connection:
         """打开连接。WAL 让读写不容易互相堵住。"""
@@ -35,7 +36,8 @@ class HistoryStore:
                     group_id TEXT NOT NULL,
                     user_id TEXT NOT NULL,
                     name TEXT NOT NULL,
-                    text TEXT NOT NULL
+                    text TEXT NOT NULL,
+                    message_id TEXT NOT NULL DEFAULT ''
                 )
                 """
             )
@@ -44,19 +46,49 @@ class HistoryStore:
         finally:
             conn.close()
 
-    async def add(self, ts: int, group_id: str, user_id: str, name: str, text: str) -> None:
+    def _migrate(self) -> None:
+        """给老库补列。不能重建表，旧库里有已经积累的聊天记录。"""
+        conn = self._connect()
+        try:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(group_history)")}
+            # 早于撤回功能的库没有 message_id 列，补上并给旧行留空
+            if "message_id" not in cols:
+                conn.execute(
+                    "ALTER TABLE group_history ADD COLUMN message_id TEXT NOT NULL DEFAULT ''"
+                )
+                conn.commit()
+        finally:
+            conn.close()
+
+    async def add(
+        self,
+        ts: int,
+        group_id: str,
+        user_id: str,
+        name: str,
+        text: str,
+        message_id: str = "",
+    ) -> None:
         """写入一条群消息。失败由调用方记日志，这里只负责入库。"""
         async with self._lock:
-            await asyncio.to_thread(self._add_sync, ts, group_id, user_id, name, text)
+            await asyncio.to_thread(self._add_sync, ts, group_id, user_id, name, text, message_id)
 
-    def _add_sync(self, ts: int, group_id: str, user_id: str, name: str, text: str) -> None:
+    def _add_sync(
+        self,
+        ts: int,
+        group_id: str,
+        user_id: str,
+        name: str,
+        text: str,
+        message_id: str,
+    ) -> None:
         """同步写入，给 to_thread 用。"""
         conn = self._connect()
         try:
             conn.execute(
-                "INSERT INTO group_history(ts, group_id, user_id, name, text) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (ts, group_id, user_id, name, text),
+                "INSERT INTO group_history(ts, group_id, user_id, name, text, message_id) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (ts, group_id, user_id, name, text, message_id),
             )
             conn.commit()
         finally:
@@ -72,7 +104,7 @@ class HistoryStore:
         conn = self._connect()
         try:
             rows = conn.execute(
-                "SELECT ts, name, user_id, text FROM group_history "
+                "SELECT ts, name, user_id, text, message_id FROM group_history "
                 "WHERE group_id = ? AND ts >= ? ORDER BY ts ASC LIMIT ?",
                 (group_id, since_ts, limit),
             ).fetchall()
@@ -80,8 +112,34 @@ class HistoryStore:
             conn.close()
         records = []
         for row in rows:
-            records.append(ChatRecord(int(row[0]), str(row[1]), str(row[2]), str(row[3])))
+            records.append(
+                ChatRecord(int(row[0]), str(row[1]), str(row[2]), str(row[3]), str(row[4] or ""))
+            )
         return records
+
+    async def recent_ids(self, group_id: str, limit: int) -> list[str]:
+        """取本群最近的若干条消息 ID，按时间倒序。撤回功能用。"""
+        async with self._lock:
+            return await asyncio.to_thread(self._recent_ids_sync, group_id, limit)
+
+    def _recent_ids_sync(self, group_id: str, limit: int) -> list[str]:
+        """同步查询最近的消息 ID，跳过没有 ID 的老记录。"""
+        conn = self._connect()
+        try:
+            rows = conn.execute(
+                "SELECT message_id FROM group_history "
+                "WHERE group_id = ? AND message_id != '' ORDER BY ts DESC LIMIT ?",
+                (group_id, limit),
+            ).fetchall()
+        finally:
+            conn.close()
+        ids = []
+        for row in rows:
+            value = str(row[0] or "")
+            # 空 ID 撤不了，直接跳过
+            if value:
+                ids.append(value)
+        return ids
 
     async def count(self, group_id: str) -> int:
         """本群一共记了多少条，给状态指令展示。"""

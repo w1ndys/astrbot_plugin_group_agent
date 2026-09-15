@@ -20,6 +20,9 @@ NOTICE_TEXT_LIMIT = 400
 NOTICE_SHOW_LIMIT = 3
 NOTICE_MAX_LIMIT = 10
 
+# 一次最多撤回几条。撤回是群里可见的动作，条数要夹住。
+RECALL_RECENT_MAX = 10
+
 # 消息链里非文本段的占位符，总结时至少能看出「这里发过图/语音」。
 MESSAGE_PLACEHOLDERS = {
     "Image": "[图片]",
@@ -62,5 +65,9 @@ ERROR_HINTS = [
     (
         ("USER_NOT_FOUND", "成员不存在", "NOT_GROUP_MEMBER"),
         "目标用户不是该群成员。",
+    ),
+    (
+        ("RECALL FAILED",),
+        "撤回失败：消息太旧，协议端已经忘了它的 ID，或它已被撤回。",
     ),
 ]

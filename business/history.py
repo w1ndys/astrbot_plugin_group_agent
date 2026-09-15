@@ -57,9 +57,10 @@ async def _history_permission(event: object, config: object, group_id: object) -
 
 
 def _format_records(records: list[ChatRecord], hours: float) -> str:
-    """把记录收成时间正序的纯文本。"""
+    """把记录收成时间正序的纯文本。每条带消息 ID，撤回时要用。"""
     lines = []
     for rec in records:
-        lines.append(f"[{format_ts(rec.ts)}] {rec.name}({rec.uid}): {rec.text}")
+        mark = f" #{rec.message_id}" if rec.message_id else ""
+        lines.append(f"[{format_ts(rec.ts)}]{mark} {rec.name}({rec.uid}): {rec.text}")
     header = f"最近 {hours:g} 小时共 {len(records)} 条：\n"
     return header + "\n".join(lines)
