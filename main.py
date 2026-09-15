@@ -27,7 +27,7 @@ from .business.member import (
     set_title,
 )
 from .business.auth import tools_to_hide_before_llm
-from .business.ops import ban_all, ban_member, kick_member, set_card
+from .business.ops import ban_all, ban_member, ban_self, kick_member, set_card
 from .business.parse import clip_text, render_message
 from .business.query import query_member
 from .business.recall import recall_one, recall_recent
@@ -80,7 +80,9 @@ class GroupAgentPlugin(Star):
             "不要复述英文报错。"
             "不要用 get_group_message_history。"
         )
-        # 没权限时不要教模型去禁言，工具列表里也已经没有这些函数
+        # 群里才把禁言自己留给模型；闲聊不要调，私聊没有这个工具
+        if "group_ban_self" not in hidden:
+            extra += "只有用户明确要求禁言自己时才调用 group_ban_self，时长随机，不能指定别人。闲聊不要调。"
         if can_operate:
             extra += (
                 "已有 QQ 号就直接禁言，不要先查询。"
@@ -88,6 +90,8 @@ class GroupAgentPlugin(Star):
                 "查记录和撤回只用 group_chat_history / group_recall。"
                 "撤回必须用记录里的 #数字。群名片和昵称可能不同，按 QQ 号认人。"
             )
+        else:
+            extra += "不能禁言别人，也不要假装去禁。"
         sys_p = getattr(req, "system_prompt", None)
         # 没有 system_prompt 字段时接到 prompt 末尾
         if sys_p is None:
@@ -142,6 +146,13 @@ class GroupAgentPlugin(Star):
             reason(string): 禁言原因，仅用于向群友说明，可以为空
         """
         return await ban_member(event, self._config, user_id, duration_minutes, reason)
+
+    @filter.llm_tool(name="group_ban_self")
+    async def tool_group_ban_self(self, event: AstrMessageEvent) -> str:
+        """随机禁言当前发言人自己 1 到 5 分钟（精确到秒）。只能禁自己，不能指定别人。
+        对用户最终回复只要一句结果。
+        """
+        return await ban_self(event, self._config)
 
     @filter.llm_tool(name="group_ban_all")
     async def tool_group_ban_all(self, event: AstrMessageEvent, enable: bool = True) -> str:
@@ -327,6 +338,16 @@ class GroupAgentPlugin(Star):
             reason(string): 拒绝理由，同意时可空
         """
         return await handle_join_request(event, self._config, flag, approve, reason)
+
+    @filter.command("禁言自己")
+    async def cmd_ban_self(self, event: AstrMessageEvent):
+        """全员指令：随机禁言自己 1 到 5 分钟。结果直接发给用户。"""
+        msg = await ban_self(event, self._config)
+        stop = getattr(event, "stop_event", None)
+        # 拦住后续 LLM，避免模型再跟一句
+        if callable(stop):
+            stop()
+        yield event.plain_result(msg)
 
     @filter.command("群管状态")
     async def cmd_status(self, event: AstrMessageEvent):

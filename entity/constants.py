@@ -10,6 +10,10 @@ MAX_BAN_SECONDS = 30 * 24 * 60 * 60
 # 模型没给时长时，默认禁言 10 分钟，避免误操作成永久。
 DEFAULT_BAN_MINUTES = 10
 
+# 全员「禁言自己」：随机 1 到 5 分钟，精确到秒。
+SELF_BAN_MIN_SECONDS = 60
+SELF_BAN_MAX_SECONDS = 5 * 60
+
 # 大群拉全量成员会撑爆模型上下文，所以列表和展示都截断。
 MEMBER_LIST_LIMIT = 200
 MEMBER_SHOW_LIMIT = 30
@@ -51,6 +55,9 @@ OPERATOR_LLM_TOOLS = (
 
 # 聊天记录工具。history_operator_only 打开时和上面一起摘。
 HISTORY_LLM_TOOL = "group_chat_history"
+
+# 全员可用：只禁言自己。私聊没有群号，发模型前要摘掉。
+SELF_LLM_TOOL = "group_ban_self"
 
 # 消息链里非文本段的占位符，总结时至少能看出「这里发过图/语音」。
 MESSAGE_PLACEHOLDERS = {

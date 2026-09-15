@@ -1,6 +1,12 @@
 # 业务层：谁能用群管工具。默认必须是 QQ 群管或 AstrBot 管理员。
 
-from ..entity.constants import HISTORY_LLM_TOOL, OPERATOR_LLM_TOOLS, ROLE_ADMIN, ROLE_OWNER
+from ..entity.constants import (
+    HISTORY_LLM_TOOL,
+    OPERATOR_LLM_TOOLS,
+    ROLE_ADMIN,
+    ROLE_OWNER,
+    SELF_LLM_TOOL,
+)
 from .onebot import call_action, unwrap_dict
 from .parse import parse_int
 from .settings import get_bool, get_setting
@@ -104,6 +110,19 @@ async def guard(event: object, config: object) -> tuple[object, str]:
     return group_id, ""
 
 
+async def guard_self_action(event: object, config: object) -> tuple[object, str]:
+    """禁言自己：必须在群里，机器人是管理员。不要求调用者是群管。"""
+    group_id = group_id_of(event)
+    # 私聊没有群号，禁言没有对象群
+    if not group_id:
+        return None, "该操作只能在群聊中使用。"
+    err = await check_bot_admin(event, config, group_id)
+    # 机器人没权限也停，给一句人话而不是协议报错
+    if err:
+        return None, err
+    return group_id, ""
+
+
 async def tools_to_hide_before_llm(event: object, config: object) -> tuple[str, ...]:
     """请求模型前要摘掉的工具名。没权限的人根本看不到 group_ban 等。"""
     group_id = group_id_of(event)
@@ -112,6 +131,7 @@ async def tools_to_hide_before_llm(event: object, config: object) -> tuple[str, 
     if not group_id:
         hidden.extend(OPERATOR_LLM_TOOLS)
         hidden.append(HISTORY_LLM_TOOL)
+        hidden.append(SELF_LLM_TOOL)
         return tuple(hidden)
     err = await check_operator(event, config, group_id)
     # 普通群员：写工具和要鉴权的只读工具都不进模型

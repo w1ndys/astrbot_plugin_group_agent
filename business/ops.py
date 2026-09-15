@@ -1,7 +1,16 @@
 # 业务层：禁言、踢人、改名片。返回给模型看的中文。
 
-from ..entity.constants import DEFAULT_BAN_MINUTES, MAX_BAN_SECONDS, ROLE_OWNER
-from .auth import get_role, guard, self_id_of
+import random
+
+from ..entity.constants import (
+    DEFAULT_BAN_MINUTES,
+    MAX_BAN_SECONDS,
+    ROLE_ADMIN,
+    ROLE_OWNER,
+    SELF_BAN_MAX_SECONDS,
+    SELF_BAN_MIN_SECONDS,
+)
+from .auth import get_role, guard, guard_self_action, self_id_of
 from .onebot import call_action
 from .parse import parse_int
 from .settings import get_bool
@@ -45,6 +54,46 @@ async def ban_member(
     # 大于 0 秒就是禁言；原因不回给模型，免得它再复述一遍
     minutes = seconds / 60
     return f"已禁言 {target} {minutes:g} 分钟。"
+
+
+async def ban_self(event: object, config: object) -> str:
+    """随机禁言发言人自己 1 到 5 分钟。全员可用，不能指定别人。"""
+    group_id, err = await guard_self_action(event, config)
+    # 没过检查就原样把原因回给调用方
+    if err:
+        return err
+    sender = str(event.get_sender_id())  # type: ignore[union-attr]
+    target = parse_int(sender)
+    # 拿不到纯数字 QQ 号就没法调协议
+    if target is None:
+        return "拿不到你的 QQ 号，没法禁言。"
+    # 机器人不能禁言自己
+    if str(target) == self_id_of(event):
+        return "不能对自己执行禁言操作。"
+    role = await get_role(event, config, group_id, str(target))
+    # QQ 不允许禁言群主或管理员
+    if role in (ROLE_OWNER, ROLE_ADMIN):
+        return "你是管理员，QQ 不允许禁言管理员。"
+    seconds = random.randint(SELF_BAN_MIN_SECONDS, SELF_BAN_MAX_SECONDS)
+    ok, _data, api_err = await call_action(
+        event, config, "set_group_ban", group_id=group_id, user_id=target, duration=seconds
+    )
+    # 协议失败把原因回填
+    if not ok:
+        return api_err
+    return f"已随机禁言你 {_format_duration(seconds)}。"
+
+
+def _format_duration(seconds: int) -> str:
+    """把秒收成「X 分 Y 秒」，方便念给群友。"""
+    minutes, remain = divmod(seconds, 60)
+    # 整分钟就不要带 0 秒
+    if remain == 0:
+        return f"{minutes} 分钟"
+    # 不足 1 分钟只说秒
+    if minutes == 0:
+        return f"{remain} 秒"
+    return f"{minutes} 分 {remain} 秒"
 
 
 def _ban_seconds(duration_minutes: object) -> tuple[int, str]:
