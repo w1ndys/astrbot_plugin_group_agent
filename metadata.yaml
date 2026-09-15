@@ -1,0 +1,28 @@
+name: astrbot_plugin_group_agent
+display_name: 群管 Agent
+short_desc: 用自然语言在 QQ 群里禁言、踢人、查成员、总结聊天记录
+desc: |
+  AstrBot 插件：用自然语言在 QQ 群里禁言、踢人、改名片、查成员、总结聊天记录。
+  面向 NapCat / Lagrange / LLOneBot 等 OneBot v11 协议端。
+
+  内置 LLM 工具（由主 Agent 按需自动调用，无需记指令）：
+  - group_ban        禁言 / 解除禁言（最长 30 天）
+  - group_ban_all    开启 / 解除全员禁言
+  - group_kick       踢人（可选拒绝再次加群）
+  - group_set_card   设置 / 清空群名片
+  - group_member_query  按 QQ 号查成员，或按昵称反查 QQ 号，或列出群管理员
+  - group_chat_history  获取本群最近聊天记录，用于总结与分析
+
+  同时被动记录全量群消息到 SQLite，供「总结今天的聊天记录」使用。
+
+  安全设计：所有群管动作默认要求调用者是 QQ 群主/群管理员或 AstrBot 管理员；
+  机器人自身没有管理员权限时会提前给出清晰提示；协议端异常一律转成可读文本
+  回填给模型，不会中断 Agent 循环。
+
+  仅支持 OneBot v11（aiocqhttp）平台，例如 NapCat、Lagrange、LLOneBot。
+version: 1.0.0
+author: w1ndys
+repo: https://github.com/w1ndys/astrbot_plugin_group_agent
+astrbot_version: ">=4.13"
+support_platforms:
+  - aiocqhttp
