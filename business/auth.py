@@ -1,6 +1,9 @@
 # 业务层：谁能用群管工具。默认必须是 QQ 群管或 AstrBot 管理员。
 
 from ..entity.constants import (
+    ADMIN_LLM_TOOLS,
+    GROUP_ID_LLM_TOOLS,
+    GROUP_ONLY_LLM_TOOLS,
     HISTORY_LLM_TOOL,
     OPERATOR_LLM_TOOLS,
     ROLE_ADMIN,
@@ -127,11 +130,18 @@ async def tools_to_hide_before_llm(event: object, config: object) -> tuple[str, 
     """请求模型前要摘掉的工具名。没权限的人根本看不到 group_ban 等。"""
     group_id = group_id_of(event)
     hidden: list[str] = []
-    # 私聊没有群号，群管工具全部没有对象
+    admin = is_astrbot_admin(event)
+    # 好友和机器人所在群，只有 AstrBot 管理员能碰
+    if not admin:
+        hidden.extend(ADMIN_LLM_TOOLS)
+    # 私聊没有当前群：旧群管工具没有对象；管理员仍可用填群号的工具
     if not group_id:
-        hidden.extend(OPERATOR_LLM_TOOLS)
+        hidden.extend(GROUP_ONLY_LLM_TOOLS)
         hidden.append(HISTORY_LLM_TOOL)
         hidden.append(SELF_LLM_TOOL)
+        # 普通私聊连指定群的工具也不给
+        if not admin:
+            hidden.extend(GROUP_ID_LLM_TOOLS)
         return tuple(hidden)
     err = await check_operator(event, config, group_id)
     # 普通群员：写工具和要鉴权的只读工具都不进模型
@@ -140,6 +150,29 @@ async def tools_to_hide_before_llm(event: object, config: object) -> tuple[str, 
         if get_bool(config, "history_operator_only", True):
             hidden.append(HISTORY_LLM_TOOL)
     return tuple(hidden)
+
+
+def guard_admin(event: object) -> str:
+    """只有 AstrBot 管理员能过。空字符串表示通过。"""
+    # 好友列表、点赞、机器人所在群都属于号级能力
+    if is_astrbot_admin(event):
+        return ""
+    return "只有 AstrBot 管理员能执行该操作。"
+
+
+async def guard_group_write(
+    event: object, config: object, group_id: str = ""
+) -> tuple[object, str]:
+    """改群设置：指定群或当前群，调用者和机器人都要有权限。"""
+    target, err = await guard_group(event, config, group_id)
+    # 调用者没权限就停
+    if err:
+        return None, err
+    err = await check_bot_admin(event, config, target)
+    # 机器人不是那个群的管，改不了设置
+    if err:
+        return None, err
+    return target, ""
 
 
 async def guard_readonly(event: object, config: object) -> tuple[object, str]:
@@ -153,3 +186,24 @@ async def guard_readonly(event: object, config: object) -> tuple[object, str]:
     if err:
         return None, err
     return group_id, ""
+
+
+async def guard_group(
+    event: object, config: object, group_id: str = ""
+) -> tuple[object, str]:
+    """只读：当前群，或管理员指定的群号。调用者要对那个群有权限。"""
+    specified = str(group_id or "").strip()
+    # 填了群号就查那个群，没填用当前群
+    if specified:
+        parsed = parse_int(specified)
+        target = parsed if parsed is not None else specified
+    else:
+        target = group_id_of(event)
+    # 私聊又没给群号，不知道查哪个
+    if not target:
+        return None, "请指定群号，或在群里使用。"
+    err = await check_operator(event, config, target)
+    # 不是那个群的管、也不是 AstrBot 管理员，不能看成员名单
+    if err:
+        return None, err
+    return target, ""

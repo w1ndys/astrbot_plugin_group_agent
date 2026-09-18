@@ -13,8 +13,34 @@ from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star, StarTools
 
+from .business.auth import tools_to_hide_before_llm
+from .business.essence import delete_essence, list_essence, set_essence
+from .business.friend import (
+    handle_doubt_friend,
+    handle_friend_request,
+    list_doubt_friends,
+    list_friends,
+    recent_contact,
+    send_like,
+    set_remark,
+    stranger_info,
+)
+from .business.group_extra import (
+    at_all_remain,
+    group_sign,
+    group_todo,
+    honor_info,
+    list_groups,
+    set_admin,
+    set_group_name,
+    set_group_remark,
+    set_invite_policy,
+    set_join_option,
+    signed_list,
+)
 from .business.history import read_history
 from .business.info import (
+    delete_notice,
     list_bans,
     query_group_info,
     read_notice,
@@ -26,18 +52,18 @@ from .business.member import (
     poke_member,
     set_title,
 )
-from .business.auth import tools_to_hide_before_llm
 from .business.ops import ban_all, ban_member, ban_self, kick_member, set_card
 from .business.parse import clip_text, render_message
-from .business.query import query_member
+from .business.query import list_members, query_member
 from .business.recall import recall_one, recall_recent
+from .business.recognize import emoji_like, ocr_image, ptt_text
 from .business.settings import get_bool, get_int
 from .data.store import HistoryStore
 from .entity.constants import DEFAULT_BAN_MINUTES, NOTICE_SHOW_LIMIT, RECALL_RECENT_MAX
 
 
 class GroupAgentPlugin(Star):
-    """AstrBot 群管插件。把自然语言收成 OneBot 群管动作。"""
+    """AstrBot QQ 能力插件。把自然语言收成 OneBot 群管和好友动作。"""
 
     def __init__(self, context: Context, config=None) -> None:
         super().__init__(context)
@@ -68,29 +94,36 @@ class GroupAgentPlugin(Star):
         """请求模型前：没权限则摘掉群管工具，有权限才补群管回复规则。"""
         tools = getattr(req, "func_tool", None)
         hidden = await tools_to_hide_before_llm(event, self._config)
-        can_operate = not hidden
         # 请求里还挂着内置历史工具时当场拿掉，避免模型再用错 ID
         if tools is not None and hasattr(tools, "remove_tool"):
             tools.remove_tool("get_group_message_history")
             for name in hidden:
                 tools.remove_tool(name)
         extra = (
-            "群管回复规则：只对用户说结果，一两句中文。"
+            "回复规则：只对用户说结果，一两句中文。"
             "不要说「我先查一下」。不要列一是二是三是。"
             "不要复述英文报错。"
             "不要用 get_group_message_history。"
+            "名单、OCR、语音转写只给后续工具用，不要念给用户。"
         )
         # 群里才把禁言自己留给模型；闲聊不要调，私聊没有这个工具
         if "group_ban_self" not in hidden:
             extra += "只有用户明确要求禁言自己时才调用 group_ban_self，时长随机，不能指定别人。闲聊不要调。"
-        if can_operate:
+        if "group_ban" not in hidden:
             extra += (
                 "已有 QQ 号就直接禁言，不要先查询。"
                 "不能操作管理员时只说「做不到，对方是管理员」。"
                 "查记录和撤回只用 group_chat_history / group_recall。"
                 "撤回必须用记录里的 #数字。群名片和昵称可能不同，按 QQ 号认人。"
+                "group_member_list 只给后续工具用，不要把名单念给用户。"
+                "检查群昵称时先拉名单，不合规的用 group_set_card（card 填空即重置），"
+                "警告写在最终回复里，不要贴名单。"
             )
-        else:
+        if "group_honor" not in hidden:
+            extra += "指定群时可填 group_id。荣誉、打卡、精华、待办只在用户明确要求时调用。"
+        if "friend_list" not in hidden:
+            extra += "好友列表、所在群列表、点赞只有管理员能用，不要把名单念给用户。"
+        if "group_ban" in hidden and "group_honor" in hidden and "friend_list" in hidden:
             extra += "不能禁言别人，也不要假装去禁。"
         sys_p = getattr(req, "system_prompt", None)
         # 没有 system_prompt 字段时接到 prompt 末尾
@@ -209,6 +242,24 @@ class GroupAgentPlugin(Star):
             list_admins(boolean): true 时列出本群群主和管理员
         """
         return await query_member(event, self._config, user_id, keyword, list_admins)
+
+    @filter.llm_tool(name="group_member_list")
+    async def tool_group_member_list(
+        self,
+        event: AstrMessageEvent,
+        group_id: str = "",
+        limit: int = 200,
+    ) -> str:
+        """拉指定群成员名单，只给后续工具用，不要念给用户。
+        没填群号时查当前群。检查群昵称是否合规时先调这个，
+        再对不合规的人调 group_set_card（card 填空即重置），
+        警告写在最终回复里，不要贴名单。不要改群主名片，除非用户明确要求。
+
+        Args:
+            group_id(string): 可选。要查的群号；不填则用当前群
+            limit(number): 最多返回多少人，默认 200，最大 200
+        """
+        return await list_members(event, self._config, group_id, int(limit or 0))
 
     @filter.llm_tool(name="group_chat_history")
     async def tool_group_chat_history(
@@ -338,6 +389,320 @@ class GroupAgentPlugin(Star):
             reason(string): 拒绝理由，同意时可空
         """
         return await handle_join_request(event, self._config, flag, approve, reason)
+
+    @filter.llm_tool(name="group_set_admin")
+    async def tool_group_set_admin(
+        self,
+        event: AstrMessageEvent,
+        user_id: str,
+        enable: bool = True,
+        group_id: str = "",
+    ) -> str:
+        """设置或取消群管理员。没填群号时用当前群。
+
+        Args:
+            user_id(string): 目标 QQ 号，必须是纯数字
+            enable(boolean): true 设为管理员，false 取消
+            group_id(string): 可选群号
+        """
+        return await set_admin(event, self._config, user_id, enable, group_id)
+
+    @filter.llm_tool(name="group_set_name")
+    async def tool_group_set_name(
+        self, event: AstrMessageEvent, group_name: str, group_id: str = ""
+    ) -> str:
+        """修改群名称。没填群号时用当前群。
+
+        Args:
+            group_name(string): 新群名，不能为空
+            group_id(string): 可选群号
+        """
+        return await set_group_name(event, self._config, group_name, group_id)
+
+    @filter.llm_tool(name="group_essence_list")
+    async def tool_group_essence_list(
+        self, event: AstrMessageEvent, group_id: str = ""
+    ) -> str:
+        """获取群精华消息列表，只给后续工具用，不要念给用户。
+
+        Args:
+            group_id(string): 可选群号
+        """
+        return await list_essence(event, self._config, group_id)
+
+    @filter.llm_tool(name="group_essence_set")
+    async def tool_group_essence_set(
+        self, event: AstrMessageEvent, message_id: str, group_id: str = ""
+    ) -> str:
+        """把一条消息设为精华。message_id 必须是数字。
+
+        Args:
+            message_id(string): 消息 ID
+            group_id(string): 可选群号
+        """
+        return await set_essence(event, self._config, message_id, group_id)
+
+    @filter.llm_tool(name="group_essence_delete")
+    async def tool_group_essence_delete(
+        self, event: AstrMessageEvent, message_id: str, group_id: str = ""
+    ) -> str:
+        """把一条消息移出精华。
+
+        Args:
+            message_id(string): 消息 ID
+            group_id(string): 可选群号
+        """
+        return await delete_essence(event, self._config, message_id, group_id)
+
+    @filter.llm_tool(name="group_notice_delete")
+    async def tool_group_notice_delete(
+        self, event: AstrMessageEvent, notice_id: str, group_id: str = ""
+    ) -> str:
+        """删除一条群公告。notice_id 来自 group_notice_list。
+
+        Args:
+            notice_id(string): 公告 ID
+            group_id(string): 可选群号
+        """
+        return await delete_notice(event, self._config, notice_id, group_id)
+
+    @filter.llm_tool(name="group_join_option")
+    async def tool_group_join_option(
+        self,
+        event: AstrMessageEvent,
+        add_type: str,
+        question: str = "",
+        answer: str = "",
+        group_id: str = "",
+    ) -> str:
+        """修改加群方式。
+
+        Args:
+            add_type(string): 任何人 / 验证 / 不允许 / 问题，或 1/2/3/4
+            question(string): 加群问题，选「问题」时用
+            answer(string): 加群答案，选「问题」时用
+            group_id(string): 可选群号
+        """
+        return await set_join_option(
+            event, self._config, add_type, question, answer, group_id
+        )
+
+    @filter.llm_tool(name="group_invite_policy")
+    async def tool_group_invite_policy(
+        self, event: AstrMessageEvent, policy: str, group_id: str = ""
+    ) -> str:
+        """修改成员邀请好友进群的策略。
+
+        Args:
+            policy(string): 禁止 / 审核 / 无需审核 / 百人以下无需审核
+            group_id(string): 可选群号
+        """
+        return await set_invite_policy(event, self._config, policy, group_id)
+
+    @filter.llm_tool(name="group_todo")
+    async def tool_group_todo(
+        self,
+        event: AstrMessageEvent,
+        action: str,
+        message_id: str,
+        group_id: str = "",
+    ) -> str:
+        """设置、完成或取消群待办。message_id 来自聊天记录。
+
+        Args:
+            action(string): set / complete / cancel
+            message_id(string): 消息 ID
+            group_id(string): 可选群号
+        """
+        return await group_todo(event, self._config, action, message_id, group_id)
+
+    @filter.llm_tool(name="group_sign")
+    async def tool_group_sign(self, event: AstrMessageEvent, group_id: str = "") -> str:
+        """群打卡。
+
+        Args:
+            group_id(string): 可选群号
+        """
+        return await group_sign(event, self._config, group_id)
+
+    @filter.llm_tool(name="group_signed_list")
+    async def tool_group_signed_list(
+        self, event: AstrMessageEvent, group_id: str = ""
+    ) -> str:
+        """查看今日打卡名单。
+
+        Args:
+            group_id(string): 可选群号
+        """
+        return await signed_list(event, self._config, group_id)
+
+    @filter.llm_tool(name="group_honor")
+    async def tool_group_honor(
+        self, event: AstrMessageEvent, kind: str = "all", group_id: str = ""
+    ) -> str:
+        """查看群荣誉（龙王等）。对用户不要照念全部榜单。
+
+        Args:
+            kind(string): all / talkative / performer / legend / emotion / strong_newbie
+            group_id(string): 可选群号
+        """
+        return await honor_info(event, self._config, kind, group_id)
+
+    @filter.llm_tool(name="group_at_all_remain")
+    async def tool_group_at_all_remain(
+        self, event: AstrMessageEvent, group_id: str = ""
+    ) -> str:
+        """查看本群还能 @全体 几次。
+
+        Args:
+            group_id(string): 可选群号
+        """
+        return await at_all_remain(event, self._config, group_id)
+
+    @filter.llm_tool(name="ocr_image")
+    async def tool_ocr_image(self, event: AstrMessageEvent, image: str) -> str:
+        """识别图片里的文字，只给后续判断用，不要把全文贴群里。仅 Windows NapCat 可用。
+
+        Args:
+            image(string): 图片 URL、路径或 file_id
+        """
+        return await ocr_image(event, self._config, image)
+
+    @filter.llm_tool(name="ptt_text")
+    async def tool_ptt_text(self, event: AstrMessageEvent, message_id: str) -> str:
+        """把一条语音转成文字，只给后续判断用，不要把全文贴群里。
+
+        Args:
+            message_id(string): 语音消息 ID
+        """
+        return await ptt_text(event, self._config, message_id)
+
+    @filter.llm_tool(name="msg_emoji_like")
+    async def tool_msg_emoji_like(
+        self,
+        event: AstrMessageEvent,
+        message_id: str,
+        emoji_id: str = "76",
+        set_on: bool = True,
+    ) -> str:
+        """给消息贴表情回复。默认 76（赞）。
+
+        Args:
+            message_id(string): 消息 ID
+            emoji_id(string): 表情 ID，默认 76
+            set_on(boolean): true 贴上，false 取消
+        """
+        return await emoji_like(event, self._config, message_id, emoji_id, set_on)
+
+    @filter.llm_tool(name="qq_group_list")
+    async def tool_qq_group_list(self, event: AstrMessageEvent) -> str:
+        """列出机器人所在群。只有 AstrBot 管理员能用。不要把名单念给用户。
+
+        Args: 无
+        """
+        return await list_groups(event, self._config)
+
+    @filter.llm_tool(name="group_set_remark")
+    async def tool_group_set_remark(
+        self, event: AstrMessageEvent, remark: str, group_id: str = ""
+    ) -> str:
+        """设置机器人自己对某个群的备注，不是改群名。只有 AstrBot 管理员能用。
+
+        Args:
+            remark(string): 备注；空字符串表示清空
+            group_id(string): 群号，私聊时必填
+        """
+        return await set_group_remark(event, self._config, remark, group_id)
+
+    @filter.llm_tool(name="friend_list")
+    async def tool_friend_list(self, event: AstrMessageEvent, keyword: str = "") -> str:
+        """列出机器人好友。只有 AstrBot 管理员能用。不要把名单念给用户。
+
+        Args:
+            keyword(string): 可选。按昵称、备注或 QQ 号筛选
+        """
+        return await list_friends(event, self._config, keyword)
+
+    @filter.llm_tool(name="friend_set_remark")
+    async def tool_friend_set_remark(
+        self, event: AstrMessageEvent, user_id: str, remark: str = ""
+    ) -> str:
+        """设置好友备注。只有 AstrBot 管理员能用。
+
+        Args:
+            user_id(string): 好友 QQ 号
+            remark(string): 备注；空字符串表示清空
+        """
+        return await set_remark(event, self._config, user_id, remark)
+
+    @filter.llm_tool(name="friend_request_handle")
+    async def tool_friend_request_handle(
+        self,
+        event: AstrMessageEvent,
+        flag: str,
+        approve: bool,
+        remark: str = "",
+    ) -> str:
+        """处理加好友请求。flag 来自上报。只有 AstrBot 管理员能用。
+
+        Args:
+            flag(string): 请求标识
+            approve(boolean): true 同意，false 拒绝
+            remark(string): 同意后的备注，可空
+        """
+        return await handle_friend_request(event, self._config, flag, approve, remark)
+
+    @filter.llm_tool(name="doubt_friend_list")
+    async def tool_doubt_friend_list(self, event: AstrMessageEvent) -> str:
+        """列出可疑好友申请。只有 AstrBot 管理员能用。
+
+        Args: 无
+        """
+        return await list_doubt_friends(event, self._config)
+
+    @filter.llm_tool(name="doubt_friend_handle")
+    async def tool_doubt_friend_handle(
+        self, event: AstrMessageEvent, flag: str, approve: bool = True
+    ) -> str:
+        """处理可疑好友申请。只有 AstrBot 管理员能用。
+
+        Args:
+            flag(string): 请求标识
+            approve(boolean): 是否同意
+        """
+        return await handle_doubt_friend(event, self._config, flag, approve)
+
+    @filter.llm_tool(name="send_like")
+    async def tool_send_like(
+        self, event: AstrMessageEvent, user_id: str, times: int = 1
+    ) -> str:
+        """给某人点赞。只有 AstrBot 管理员能用。
+
+        Args:
+            user_id(string): 对方 QQ 号
+            times(number): 次数，默认 1，最大 10
+        """
+        return await send_like(event, self._config, user_id, int(times or 1))
+
+    @filter.llm_tool(name="stranger_info")
+    async def tool_stranger_info(self, event: AstrMessageEvent, user_id: str) -> str:
+        """查陌生人资料。只有 AstrBot 管理员能用。不要把全部字段念给用户。
+
+        Args:
+            user_id(string): QQ 号
+        """
+        return await stranger_info(event, self._config, user_id)
+
+    @filter.llm_tool(name="qq_recent_contact")
+    async def tool_qq_recent_contact(
+        self, event: AstrMessageEvent, count: int = 10
+    ) -> str:
+        """最近会话。只有 AstrBot 管理员能用。不要把列表念给用户。
+
+        Args:
+            count(number): 条数，默认 10，最大 30
+        """
+        return await recent_contact(event, self._config, int(count or 10))
 
     @filter.command("禁言自己")
     async def cmd_ban_self(self, event: AstrMessageEvent):

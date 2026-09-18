@@ -1,7 +1,13 @@
-# 业务层：查群成员。按 QQ 号、按昵称、或列出管理员。
+# 业务层：查群成员。按 QQ 号、按昵称、列出管理员，或拉指定群名单。
 
-from ..entity.constants import MEMBER_LIST_LIMIT, MEMBER_SHOW_LIMIT, ROLE_ADMIN, ROLE_OWNER
-from .auth import guard
+from ..entity.constants import (
+    MEMBER_LIST_LIMIT,
+    MEMBER_LIST_SHOW_DEFAULT,
+    MEMBER_SHOW_LIMIT,
+    ROLE_ADMIN,
+    ROLE_OWNER,
+)
+from .auth import guard, guard_group
 from .onebot import call_action, unwrap_dict, unwrap_list
 from .parse import parse_int
 
@@ -28,6 +34,49 @@ async def query_member(
     if keyword:
         return await _query_by_keyword(event, config, group_id, keyword)
     return "请至少提供 user_id、keyword 或 list_admins 其中之一。"
+
+
+async def list_members(
+    event: object, config: object, group_id: str = "", limit: int = 0
+) -> str:
+    """拉指定群的成员名单给后续工具用。没填群号就用当前群。"""
+    target, err = await guard_group(event, config, group_id)
+    # 没过权限检查就停
+    if err:
+        return err
+    ok, result, api_err = await call_action(
+        event, config, "get_group_member_list", group_id=target
+    )
+    # 拉名单失败就停
+    if not ok:
+        return api_err
+    items = [item for item in unwrap_list(result) if isinstance(item, dict)]
+    # 空名单当成查不到，避免模型以为工具坏了
+    if not items:
+        return f"群 {target} 没有查到成员。"
+    want = _list_show_limit(limit)
+    shown = items[:want]
+    lines = [_format_member(item) for item in shown]
+    head = f"群 {target} 成员 {len(items)} 人。以下仅供后续工具使用，不要念给用户"
+    # 人太多只给前 N，避免撑爆上下文
+    if len(items) > want:
+        head += f"；只返回前 {want} 人"
+    return head + "。\n" + "\n".join(lines)
+
+
+def _list_show_limit(limit: int) -> int:
+    """名单展示人数夹在 1 和上限之间。"""
+    # 模型没给或给了 0，用默认
+    if not limit:
+        return MEMBER_LIST_SHOW_DEFAULT
+    n = int(limit)
+    # 至少展示 1 人，否则这工具没意义
+    if n < 1:
+        return 1
+    # 超过扫描上限就夹住
+    if n > MEMBER_LIST_LIMIT:
+        return MEMBER_LIST_LIMIT
+    return n
 
 
 def _format_member(info: dict[str, object]) -> str:

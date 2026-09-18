@@ -8,7 +8,7 @@ from ..entity.constants import (
     NOTICE_SHOW_LIMIT,
     NOTICE_TEXT_LIMIT,
 )
-from .auth import guard, guard_readonly
+from .auth import guard, guard_group_write, guard_readonly
 from .onebot import call_action, unwrap_dict, unwrap_list
 from .parse import clip_text, format_ts, parse_int
 from .settings import get_bool
@@ -118,7 +118,12 @@ def _format_notice(item: dict[str, object]) -> str:
     text = clip_text(html.unescape(text).strip(), NOTICE_TEXT_LIMIT)
     # 时间缺失时不硬编时间，直接说明未知
     when = format_ts(ts) if ts else "时间未知"
-    return f"[{when}] {sender}\n{text}"
+    nid = item.get("notice_id") or ""
+    line = f"[{when}] {sender}"
+    # 删公告时要用 notice_id
+    if nid:
+        line += f"  id {nid}"
+    return f"{line}\n{text}"
 
 
 async def send_notice(event: object, config: object, content: str, pinned: bool) -> str:
@@ -146,6 +151,25 @@ async def send_notice(event: object, config: object, content: str, pinned: bool)
     if not ok:
         return api_err
     return "公告已发布。"
+
+
+async def delete_notice(event: object, config: object, notice_id: str, group_id: str = "") -> str:
+    """按公告 id 删除。id 来自 group_notice_list。"""
+    target, err = await guard_group_write(event, config, group_id)
+    # 没过权限检查就停
+    if err:
+        return err
+    nid = (notice_id or "").strip()
+    # 空 id 协议端会失败
+    if not nid:
+        return "公告 id 不能为空。请先用 group_notice_list 查看。"
+    ok, _result, api_err = await call_action(
+        event, config, "_del_group_notice", group_id=target, notice_id=nid
+    )
+    # 协议失败把原因回给模型
+    if not ok:
+        return api_err
+    return f"已删除公告 {nid}。"
 
 
 async def list_bans(event: object, config: object) -> str:

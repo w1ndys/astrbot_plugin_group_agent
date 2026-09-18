@@ -17,6 +17,8 @@ SELF_BAN_MAX_SECONDS = 5 * 60
 # 大群拉全量成员会撑爆模型上下文，所以列表和展示都截断。
 MEMBER_LIST_LIMIT = 200
 MEMBER_SHOW_LIMIT = 30
+# 名单给 Agent 内部用，默认尽量给全，上限仍受 MEMBER_LIST_LIMIT 夹住。
+MEMBER_LIST_SHOW_DEFAULT = 200
 
 # 群公告常常是整篇 HTML 文本，展示前截断，避免撑爆上下文。
 NOTICE_TEXT_LIMIT = 400
@@ -34,8 +36,45 @@ HISTORY_API_MAX = 50
 # 加群申请一次展示几条，避免把别的群的申请塞进上下文。
 JOIN_REQUEST_SHOW_LIMIT = 10
 
-# 执行层走 guard / guard_readonly 的工具。没权限的人在发模型前要从列表摘掉。
-OPERATOR_LLM_TOOLS = (
+# 好友名单、群列表、精华展示上限，避免撑爆上下文。
+FRIEND_SHOW_LIMIT = 50
+GROUP_LIST_SHOW_LIMIT = 80
+ESSENCE_SHOW_LIMIT = 20
+HONOR_SHOW_LIMIT = 5
+LIKE_MAX_TIMES = 10
+OCR_TEXT_LIMIT = 800
+
+# 加群方式：数字按 NapCat 示例，中文别名给模型用。
+JOIN_ADD_TYPES = {
+    "1": 1,
+    "任何人": 1,
+    "allow": 1,
+    "2": 2,
+    "验证": 2,
+    "verify": 2,
+    "3": 3,
+    "不允许": 3,
+    "deny": 3,
+    "4": 4,
+    "问题": 4,
+    "question": 4,
+}
+
+# 群成员邀请好友进群的策略。
+INVITE_POLICIES = {
+    "disabled": "disabled",
+    "禁止": "disabled",
+    "require_approval": "require_approval",
+    "审核": "require_approval",
+    "需要管理员审核": "require_approval",
+    "no_approval": "no_approval",
+    "无需审核": "no_approval",
+    "no_approval_under_100": "no_approval_under_100",
+    "百人以下无需审核": "no_approval_under_100",
+}
+
+# 必须在当前群里才能用的旧工具。私聊没有群号，发模型前要摘掉。
+GROUP_ONLY_LLM_TOOLS = (
     "group_ban",
     "group_ban_all",
     "group_kick",
@@ -51,6 +90,44 @@ OPERATOR_LLM_TOOLS = (
     "group_poke",
     "group_join_list",
     "group_join_handle",
+)
+
+# 可填群号的群能力。AstrBot 管理员私聊也能用。
+GROUP_ID_LLM_TOOLS = (
+    "group_member_list",
+    "group_set_admin",
+    "group_set_name",
+    "group_essence_list",
+    "group_essence_set",
+    "group_essence_delete",
+    "group_notice_delete",
+    "group_join_option",
+    "group_invite_policy",
+    "group_todo",
+    "group_sign",
+    "group_signed_list",
+    "group_honor",
+    "group_at_all_remain",
+    "ocr_image",
+    "ptt_text",
+    "msg_emoji_like",
+)
+
+# 执行层走 guard / guard_readonly 的工具。没权限的人在发模型前要从列表摘掉。
+OPERATOR_LLM_TOOLS = GROUP_ONLY_LLM_TOOLS + GROUP_ID_LLM_TOOLS
+
+# 机器人好友和所在群。只有 AstrBot 管理员能看，群管也不行。
+ADMIN_LLM_TOOLS = (
+    "qq_group_list",
+    "group_set_remark",
+    "friend_list",
+    "friend_set_remark",
+    "friend_request_handle",
+    "doubt_friend_list",
+    "doubt_friend_handle",
+    "send_like",
+    "stranger_info",
+    "qq_recent_contact",
 )
 
 # 聊天记录工具。history_operator_only 打开时和上面一起摘。
