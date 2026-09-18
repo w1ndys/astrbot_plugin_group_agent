@@ -6,7 +6,7 @@ from ..entity.constants import (
     INVITE_POLICIES,
     JOIN_ADD_TYPES,
 )
-from .auth import group_id_of, guard_admin, guard_group, guard_group_write
+from .auth import guard_admin, guard_group, guard_group_write
 from .onebot import call_action, unwrap_dict, unwrap_list
 from .parse import parse_int
 
@@ -114,19 +114,15 @@ async def set_group_name(
 async def set_group_remark(
     event: object, config: object, remark: str, group_id: str = ""
 ) -> str:
-    """改机器人自己对这个群的备注，不是群名。"""
-    err = guard_admin(event)
-    # 号级能力
+    """改机器人自己对这个群的备注，不是群名。本群群主/管理员可用。"""
+    target, err = await guard_group(event, config, group_id)
+    # 没过权限检查就停
     if err:
         return err
-    gid = parse_int(str(group_id or "").strip())
-    # 没填就用当前群
+    gid = parse_int(target)
+    # 解析失败就原样当群号
     if gid is None:
-        current = group_id_of(event)
-        gid = parse_int(current) if current else None
-    # 还是没有群号
-    if gid is None:
-        return "请指定群号。"
+        gid = target
     ok, _data, api_err = await call_action(
         event, config, "set_group_remark", group_id=str(gid), remark=remark or ""
     )

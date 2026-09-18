@@ -5,18 +5,24 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PARENT = str(ROOT.parent)
-if PARENT not in sys.path:
-    sys.path.insert(0, PARENT)
+if str(ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(ROOT.parent))
 
-from astrbot_plugin_group_agent.business.auth import tools_to_hide_before_llm
-from astrbot_plugin_group_agent.business.friend import list_friends, send_like
-from astrbot_plugin_group_agent.business.group_extra import (
-    honor_info,
-    list_groups,
-    set_join_option,
-)
-from astrbot_plugin_group_agent.business.recognize import ocr_image
+from importlib import import_module
+
+# 包名跟目录名走，避免本地目录还是旧名时导不进
+_auth = import_module(ROOT.name + ".business.auth")
+_friend = import_module(ROOT.name + ".business.friend")
+_extra = import_module(ROOT.name + ".business.group_extra")
+_recognize = import_module(ROOT.name + ".business.recognize")
+tools_to_hide_before_llm = _auth.tools_to_hide_before_llm
+list_friends = _friend.list_friends
+send_like = _friend.send_like
+honor_info = _extra.honor_info
+list_groups = _extra.list_groups
+set_group_remark = _extra.set_group_remark
+set_join_option = _extra.set_join_option
+ocr_image = _recognize.ocr_image
 
 
 class FakeApi:
@@ -85,8 +91,10 @@ class HideToolsTest(unittest.IsolatedAsyncioTestCase):
         event = FakeEvent(group_id="123", admin=False, role="admin")
         hidden = await tools_to_hide_before_llm(event, {})
         self.assertIn("friend_list", hidden)
+        self.assertIn("qq_group_list", hidden)
         self.assertNotIn("group_ban", hidden)
         self.assertNotIn("group_honor", hidden)
+        self.assertNotIn("group_set_remark", hidden)
 
 
 class GroupExtraTest(unittest.IsolatedAsyncioTestCase):
@@ -116,6 +124,19 @@ class GroupExtraTest(unittest.IsolatedAsyncioTestCase):
         action, kwargs = event.bot.api.calls[-1]
         self.assertEqual(action, "set_group_add_option")
         self.assertEqual(kwargs["add_type"], 2)
+
+    async def test_group_remark_qq_admin(self) -> None:
+        event = FakeEvent(admin=False, role="admin")
+        text = await set_group_remark(event, {}, "值班群")
+        self.assertEqual(text, "已将群 123 的备注设为「值班群」。")
+        action, kwargs = event.bot.api.calls[-1]
+        self.assertEqual(action, "set_group_remark")
+        self.assertEqual(str(kwargs["group_id"]), "123")
+
+    async def test_group_remark_member_rejected(self) -> None:
+        event = FakeEvent(admin=False, role="member")
+        text = await set_group_remark(event, {}, "值班群")
+        self.assertIn("不能执行群管操作", text)
 
     async def test_join_option_rejects_unknown(self) -> None:
         event = FakeEvent()

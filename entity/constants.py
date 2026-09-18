@@ -92,11 +92,12 @@ GROUP_ONLY_LLM_TOOLS = (
     "group_join_handle",
 )
 
-# 可填群号的群能力。AstrBot 管理员私聊也能用。
+# 可填群号的群能力。本群群主/管理员可用；AstrBot 管理员私聊也能用。
 GROUP_ID_LLM_TOOLS = (
     "group_member_list",
     "group_set_admin",
     "group_set_name",
+    "group_set_remark",
     "group_essence_list",
     "group_essence_set",
     "group_essence_delete",
@@ -119,7 +120,6 @@ OPERATOR_LLM_TOOLS = GROUP_ONLY_LLM_TOOLS + GROUP_ID_LLM_TOOLS
 # 机器人好友和所在群。只有 AstrBot 管理员能看，群管也不行。
 ADMIN_LLM_TOOLS = (
     "qq_group_list",
-    "group_set_remark",
     "friend_list",
     "friend_set_remark",
     "friend_request_handle",

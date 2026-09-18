@@ -5,11 +5,13 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PARENT = str(ROOT.parent)
-if PARENT not in sys.path:
-    sys.path.insert(0, PARENT)
+if str(ROOT.parent) not in sys.path:
+    sys.path.insert(0, str(ROOT.parent))
 
-from astrbot_plugin_group_agent.business.query import list_members
+from importlib import import_module
+
+# 包名跟目录名走，避免本地目录还是旧名时导不进
+list_members = import_module(ROOT.name + ".business.query").list_members
 
 
 class FakeApi:

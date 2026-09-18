@@ -1,4 +1,4 @@
-# astrbot_plugin_group_agent
+# astrbot_plugin_qq_agent
 
 AstrBot 插件：用自然语言管 QQ 群和好友（QQ 能力 Agent）。
 
@@ -24,7 +24,7 @@ AstrBot 负责连 QQ、跑 Agent、做 Function Calling。本插件补 QQ 能力
 
 模型按需自动调用。名单、OCR、语音转写只给后续工具用，不要念给用户。
 
-群管（当前群；AstrBot 管理员可填 `group_id`）：
+群管（本群群主/管理员可用；AstrBot 管理员可填 `group_id` 操作其他群）：
 
 | 工具 | 作用 |
 | --- | --- |
@@ -43,6 +43,7 @@ AstrBot 负责连 QQ、跑 Agent、做 Function Calling。本插件补 QQ 能力
 | `group_join_list` / `group_join_handle` | 加群申请 |
 | `group_set_admin` | 设置或取消管理员 |
 | `group_set_name` | 改群名 |
+| `group_set_remark` | 机器人自己对群的备注 |
 | `group_essence_list` / `set` / `delete` | 精华消息 |
 | `group_notice_delete` | 删公告（id 来自 `group_notice_list`） |
 | `group_join_option` | 加群方式：任何人 / 验证 / 不允许 / 问题 |
@@ -60,7 +61,6 @@ AstrBot 负责连 QQ、跑 Agent、做 Function Calling。本插件补 QQ 能力
 | 工具 | 作用 |
 | --- | --- |
 | `qq_group_list` | 机器人所在群 |
-| `group_set_remark` | 机器人自己对群的备注 |
 | `friend_list` | 好友名单，可按关键字筛 |
 | `friend_set_remark` | 好友备注 |
 | `friend_request_handle` | 处理加好友请求 |
@@ -80,7 +80,7 @@ AstrBot ≥ 4.13，平台选 OneBot v11（aiocqhttp）。无第三方 Python 依
 
 ```bash
 cd AstrBot/data/plugins
-git clone https://github.com/w1ndys/astrbot_plugin_group_agent
+git clone https://github.com/w1ndys/astrbot_plugin_qq_agent
 ```
 
 WebUI 插件页启用或点「重载插件」。
@@ -123,9 +123,9 @@ WebUI 插件页启用或点「重载插件」。
 
 工具把结果 **return 给模型**，不直接 `yield` 到群里。这样才能「先查 QQ 号，再拿这个号去禁言」。协议端报错也会收成中文回填，Agent 循环不会断。
 
-群聊记录是自己落库的。AstrBot 会话上下文只保留唤醒过机器人的消息，且有轮数上限，不能当聊天记录库。本插件监听全部群消息，写入 `data/plugin_data/astrbot_plugin_group_agent/group_history.db`。图片、语音只记占位符。
+群聊记录是自己落库的。AstrBot 会话上下文只保留唤醒过机器人的消息，且有轮数上限，不能当聊天记录库。本插件监听全部群消息，写入 `data/plugin_data/astrbot_plugin_qq_agent/group_history.db`。图片、语音只记占位符。
 
-普通群员唤醒机器人时，会在请求模型前从工具列表摘掉 `group_ban`、好友列表等。模型看不到这些函数，就不会去调。工具函数里仍有鉴权，作为第二道。`group_ban_self` 是例外，群里全员可见，但只能禁发言人自己。好友和机器人所在群只有 AstrBot 管理员能看。
+普通群员唤醒机器人时，会在请求模型前从工具列表摘掉 `group_ban`、好友列表等。模型看不到这些函数，就不会去调。工具函数里仍有鉴权，作为第二道。`group_ban_self` 是例外，群里全员可见，但只能禁发言人自己。本群群主/管理员能用群工具。好友列表、所在群列表、点赞只有 AstrBot 管理员能看。
 
 ## 限制
 

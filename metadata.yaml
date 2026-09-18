@@ -1,4 +1,4 @@
-name: astrbot_plugin_group_agent
+name: astrbot_plugin_qq_agent
 display_name: QQ 能力 Agent
 short_desc: 用自然语言管 QQ 群、好友、精华、OCR 和语音转写
 desc: |
@@ -7,7 +7,7 @@ desc: |
 
   群管工具（群管或 AstrBot 管理员）：禁言、踢人、名片、成员、公告、精华、
   加群方式、待办、打卡、荣誉、OCR、语音转写、表情回复。
-  号级工具（仅 AstrBot 管理员）：所在群列表、好友列表、备注、好友申请、点赞、陌生人资料。
+  号级工具（仅 AstrBot 管理员）：所在群列表、好友列表、好友备注、好友申请、点赞、陌生人资料。
 
   名单、OCR、语音转写只给后续工具用，不要念给用户。
   除「禁言自己」外，没权限的人在发模型前看不到这些工具。
@@ -15,7 +15,7 @@ desc: |
   仅支持 OneBot v11（aiocqhttp）。
 version: 1.2.0
 author: w1ndys
-repo: https://github.com/w1ndys/astrbot_plugin_group_agent
+repo: https://github.com/w1ndys/astrbot_plugin_qq_agent
 astrbot_version: ">=4.13"
 support_platforms:
   - aiocqhttp

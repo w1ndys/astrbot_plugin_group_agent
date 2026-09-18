@@ -120,9 +120,13 @@ class GroupAgentPlugin(Star):
                 "警告写在最终回复里，不要贴名单。"
             )
         if "group_honor" not in hidden:
-            extra += "指定群时可填 group_id。荣誉、打卡、精华、待办只在用户明确要求时调用。"
+            extra += (
+                "本群群主或管理员可用群工具。"
+                "指定群时可填 group_id。"
+                "荣誉、打卡、精华、待办只在用户明确要求时调用。"
+            )
         if "friend_list" not in hidden:
-            extra += "好友列表、所在群列表、点赞只有管理员能用，不要把名单念给用户。"
+            extra += "好友列表、所在群列表、点赞只有 AstrBot 管理员能用，不要把名单念给用户。"
         if "group_ban" in hidden and "group_honor" in hidden and "friend_list" in hidden:
             extra += "不能禁言别人，也不要假装去禁。"
         sys_p = getattr(req, "system_prompt", None)
@@ -606,11 +610,11 @@ class GroupAgentPlugin(Star):
     async def tool_group_set_remark(
         self, event: AstrMessageEvent, remark: str, group_id: str = ""
     ) -> str:
-        """设置机器人自己对某个群的备注，不是改群名。只有 AstrBot 管理员能用。
+        """设置机器人自己对某个群的备注，不是改群名。本群群主或管理员可用。
 
         Args:
             remark(string): 备注；空字符串表示清空
-            group_id(string): 群号，私聊时必填
+            group_id(string): 可选群号，私聊时必填
         """
         return await set_group_remark(event, self._config, remark, group_id)
 
